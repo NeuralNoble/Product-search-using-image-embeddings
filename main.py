@@ -8,33 +8,62 @@ from numpy.linalg import norm
 import pickle
 from annoy import AnnoyIndex
 import pandas as pd
+import json
 
-styles_df = pd.read_csv('styles.csv',on_bad_lines='warn')
-feature_vectors = np.array(pickle.load(open('embeddings.pkl', 'rb')))
-filenames = pickle.load(open('filenames.pkl', 'rb'))
 
-# Build Annoy index
-feature_length = feature_vectors.shape[1]
-annoy_index = AnnoyIndex(feature_length, 'euclidean')
-for i, feature in enumerate(feature_vectors):
-    annoy_index.add_item(i, feature)
-annoy_index.build(50)  # You can increase the number of trees for better accuracy
+@st.cache_resource
+def load_product_info(directory_path='styles'):
+    product_info = {}
+    for filename in os.listdir(directory_path):
+        if filename.endswith('.json'):
+            with open(os.path.join(directory_path, filename), 'r', encoding='utf-8') as file:
+                data = json.load(file)
+                product_id = data['data']['id']
+                product_info[product_id] = data['data']
+    return product_info
+
+
+product_info = load_product_info()
+
+
+@st.cache_resource
+def load_embeddings_and_filenames():
+    feature_vectors = np.array(pickle.load(open('embeddings.pkl', 'rb')))
+    filenames = pickle.load(open('filenames.pkl', 'rb'))
+    return feature_vectors, filenames
+
+
+feature_vectors, filenames = load_embeddings_and_filenames()
+
+
+@st.cache_resource
+def build_annoy_index(feature_vectors):
+    feature_length = feature_vectors.shape[1]
+    annoy_index = AnnoyIndex(feature_length, 'euclidean')
+    for i, feature in enumerate(feature_vectors):
+        annoy_index.add_item(i, feature)
+    annoy_index.build(50)  # You can increase the number of trees for better accuracy
+    return annoy_index
+
+
+annoy_index = build_annoy_index(feature_vectors)
 
 # Load the pre-trained ResNet50 model
-model = tf.keras.applications.ResNet50(
-    include_top=False,
-    weights='imagenet',
-    input_shape=(224, 224, 3)
-)
-model.trainable = False
+@st.cache_resource
+def load_model():
+    model = tf.keras.applications.ResNet50(
+        include_top=False,
+        weights='imagenet',
+        input_shape=(224, 224, 3)
+    )
+    model.trainable = False
+    model = tf.keras.Sequential([
+        model,
+        GlobalMaxPooling2D(),
+    ])
+    return model
 
-# Add GlobalMaxPooling layer to the model
-model = tf.keras.Sequential([
-    model,
-    GlobalMaxPooling2D(),
-])
-
-st.set_page_config(page_title="Fashion Recommender System", layout="wide")
+model = load_model()
 
 
 
@@ -61,7 +90,8 @@ def feature_extraction(img_path, model):
 
 def recommend(features, annoy_index, num_recommendations=5):
     indices = annoy_index.get_nns_by_vector(features, num_recommendations)
-    return indices
+    recommended_products = [(idx, filenames[idx]) for idx in indices]
+    return recommended_products
 
 
 st.title("Fashion Recommender System")
@@ -75,19 +105,21 @@ if uploaded_file is not None:
 
         with st.spinner('Processing...'):
             features = feature_extraction(os.path.join("uploads", uploaded_file.name), model)
-            indices = recommend(features, annoy_index)
+            recommendations = recommend(features, annoy_index)
 
         st.success('Done!')
 
         st.header("Recommendations")
         cols = st.columns(5)
-        for col, idx in zip(cols, indices):
+        for col, (idx, filename) in zip(cols, recommendations):
             with col:
-                gender = styles_df.iloc[idx]['gender']
-                product_display_name = styles_df.iloc[idx]['productDisplayName']
-                st.image(filenames[idx], use_column_width=True)
-                st.caption(f"{product_display_name}")
-                st.caption(f"{gender}")
+                product_id_str = os.path.splitext(os.path.basename(filename))[0]
+                product_id = int(product_id_str)
+                product_name = product_info.get(product_id, {}).get('productDisplayName', 'No Name')
+                st.image(filename, use_column_width=True)
+                st.caption(product_name)
+
+
     else:
         st.error("Some error occurred in uploading the image.")
 
