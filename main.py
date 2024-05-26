@@ -5,23 +5,29 @@ import tensorflow as tf
 from tensorflow.keras.layers import GlobalMaxPooling2D
 import numpy as np
 from numpy.linalg import norm
-import os
 import pickle
-from sklearn.neighbors import NearestNeighbors
-import pandas as pd
+from annoy import AnnoyIndex
+
 
 feature_vectors = np.array(pickle.load(open('embeddings.pkl', 'rb')))
 filenames = pickle.load(open('filenames.pkl', 'rb'))
 
+# Annoy index
+feature_length = feature_vectors.shape[1]
+annoy_index = AnnoyIndex(feature_length, 'euclidean')
+for i, feature in enumerate(feature_vectors):
+    annoy_index.add_item(i, feature)
+annoy_index.build(10)
 
+# Load the pre-trained ResNet50 model
 model = tf.keras.applications.ResNet50(
     include_top=False,
     weights='imagenet',
     input_shape=(224, 224, 3)
 )
-
 model.trainable = False
 
+# GlobalMaxPooling layer to the model
 model = tf.keras.Sequential([
     model,
     GlobalMaxPooling2D(),
@@ -29,17 +35,13 @@ model = tf.keras.Sequential([
 
 st.title("Fashion Recommender System")
 
-
 def save_uploaded_file(uploaded_file):
     try:
         with open(os.path.join('uploads', uploaded_file.name), 'wb') as f:
             f.write(uploaded_file.getbuffer())
-
         return 1
-
     except:
         return 0
-
 
 def feature_extraction(img_path, model):
     img = tf.keras.preprocessing.image.load_img(img_path, target_size=(224, 224))
@@ -50,41 +52,23 @@ def feature_extraction(img_path, model):
     normalized_prediction = prediction / norm(prediction)
     return normalized_prediction
 
-
-def recommend(features, feature_vectors):
-    neighbors = NearestNeighbors(n_neighbors=6, algorithm='brute', metric='euclidean')
-    neighbors.fit(feature_vectors)
-    distances, indices = neighbors.kneighbors([features])
+def recommend(features, annoy_index, num_recommendations=5):
+    indices = annoy_index.get_nns_by_vector(features, num_recommendations)
     return indices
 
-
-uploaded_file = st.file_uploader("choose an image")
+uploaded_file = st.file_uploader("Choose an image")
 if uploaded_file is not None:
     if save_uploaded_file(uploaded_file):
         display_image = Image.open(uploaded_file)
         st.image(display_image)
         with st.spinner('Processing...'):
             features = feature_extraction(os.path.join("uploads", uploaded_file.name), model)
-            indices = recommend(features, feature_vectors)
+            indices = recommend(features, annoy_index)
         st.success('Done!')
         st.header("Recommendations")
-        col1, col2, col3, col4, col5 = st.columns(5)
-
-
-        with col1:
-            st.image(filenames[indices[0][0]])
-
-        with col2:
-            st.image(filenames[indices[0][1]])
-
-        with col3:
-            st.image(filenames[indices[0][2]])
-
-        with col4:
-            st.image(filenames[indices[0][3]])
-
-        with col5:
-            st.image(filenames[indices[0][4]])
-
+        cols = st.columns(5)
+        for col, idx in zip(cols, indices):
+            with col:
+                st.image(filenames[idx])
     else:
-        st.header("Some Error Ocurred in uploading")
+        st.header("Some error occurred in uploading")
