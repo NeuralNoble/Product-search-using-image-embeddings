@@ -14,3 +14,5 @@ This project is a fashion recommender system built using Streamlit, TensorFlow, 
 Check out the demo video to see the fashion recommender system in action!
 
 [![Demo Video](https://img.youtube.com/vi/pAX5YljK4Vk/0.jpg)](https://www.youtube.com/watch?v=pAX5YljK4Vk)
+
+<img width="500px" alt="Screenshot 2024-05-26 at 1 42 32 PM" src="https://github.com/NeuralNoble/Fashion-Recommender-System/assets/156664113/ca438eae-d660-4b25-99f0-2a887fff392f">
