@@ -1,5 +1,5 @@
-# Fashion Recommender System
-This project is a fashion recommender system built using Streamlit, TensorFlow, and Keras. It allows users to upload an image of a fashion item and receive recommendations for similar items based on image features extracted using the ResNet50 model.
+# Product Search Using Image Embeddings
+This project is a Product Search system built using Streamlit, TensorFlow, and Keras. It allows users to upload an image of a fashion item and receive  search results for similar items based on image features extracted using the ResNet50 model.
 
 ## How It Works
 1.  Users can upload an image of a fashion item through the Streamlit interface. The uploaded image is saved in the uploads directory and displayed on the web page.
